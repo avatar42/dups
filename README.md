@@ -14,6 +14,8 @@ A Java application that walks a folder tree, stores file details in a SQLite dat
 
 ## Building
 
+Java 25 or later is required to build and run the application.
+
 ```bash
 mvn clean package
 ```
