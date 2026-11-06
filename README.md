@@ -51,7 +51,7 @@ java -jar target/file-dup-detector-1.0-SNAPSHOT.jar --help
 
 ## Database
 
-The application creates a SQLite database file `file_database.db` in the scanned directory. This database persists between runs, allowing for incremental updates when re-running the scanner.
+The application creates a SQLite database file `file_database.db` in the scanned directory. The database persists between runs: each scan updates records for existing files, adds new files, removes entries for files that are no longer present, and refreshes duplicate relationships. The database file itself is excluded from scanning.
 
 ## Project Structure
 

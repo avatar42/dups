@@ -17,6 +17,7 @@ public class FileScanner {
     private int fileCount;
     private int directoryCount;
     private final String workingDir;
+    private final Path databasePath;
 
     public FileScanner(String rootPath) {
         this.rootDirectory = new File(rootPath);
@@ -24,6 +25,8 @@ public class FileScanner {
         this.fileCount = 0;
         this.directoryCount = 0;
         this.workingDir = rootPath;
+        this.databasePath = rootDirectory.toPath().toAbsolutePath().normalize()
+                .resolve(DatabaseManager.DB_NAME);
     }
 
     public String getWorkingDir() {
@@ -56,10 +59,14 @@ public class FileScanner {
             @Override
             public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) {
                 if (attrs.isRegularFile()) {
+                    Path normalizedPath = path.toAbsolutePath().normalize();
+                    if (normalizedPath.equals(databasePath)) {
+                        return FileVisitResult.CONTINUE;
+                    }
                     File file = path.toFile();
                     String hash = FileDetails.generateHash(file);
                     FileDetails fileDetails = new FileDetails(
-                            file.getAbsolutePath(),
+                            normalizedPath.toString(),
                             file.length(),
                             hash,
                             file.lastModified()
@@ -71,9 +78,8 @@ public class FileScanner {
             }
 
             @Override
-            public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                System.err.println("Failed to visit file: " + file + " - " + exc.getMessage());
-                return FileVisitResult.CONTINUE;
+            public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                throw exc;
             }
         });
 
@@ -85,32 +91,7 @@ public class FileScanner {
      */
     public void detectAndRecordDuplicates(DatabaseManager dbManager) throws IOException, SQLException {
         scan();
-
-        // Group files by hash to find duplicates
-        java.util.Map<String, List<FileDetails>> hashMap = new java.util.HashMap<>();
-        for (FileDetails file : files) {
-            if (file.getHash() != null) {
-                hashMap.computeIfAbsent(file.getHash(), k -> new java.util.ArrayList<>()).add(file);
-            }
-        }
-
-        // Record duplicates
-        for (java.util.Map.Entry<String, List<FileDetails>> entry : hashMap.entrySet()) {
-            List<FileDetails> duplicates = entry.getValue();
-            if (duplicates.size() > 1) {
-                // Record all pairs as duplicates
-                for (int i = 0; i < duplicates.size(); i++) {
-                    for (int j = i + 1; j < duplicates.size(); j++) {
-                        int fileId = dbManager.saveFile(duplicates.get(i));
-                        int duplicateId = dbManager.saveFile(duplicates.get(j));
-                        dbManager.recordDuplicate(fileId, duplicateId);
-                    }
-                }
-            } else {
-                // Single file with this hash
-                dbManager.saveFile(duplicates.get(0));
-            }
-        }
+        dbManager.synchronizeFiles(files, rootDirectory.toPath());
     }
 
     public int getFileCount() {

@@ -112,6 +112,37 @@ public class FileScannerTest {
     }
 
     @Test
+    void testRescanUpdatesFilesRemovesMissingFilesAndRefreshesDuplicates() throws IOException, SQLException {
+        scanner = new FileScanner(tempDir.toString());
+        DatabaseManager dbManager = new DatabaseManager(tempDir.toString());
+        try {
+            scanner.detectAndRecordDuplicates(dbManager);
+            assertEquals(4, dbManager.getFileCount());
+            assertEquals(1, dbManager.getDuplicateGroups().size());
+
+            Files.writeString(tempDir.resolve("file1.txt"), "Updated duplicate content");
+            Files.delete(tempDir.resolve("unique.txt"));
+            Files.writeString(tempDir.resolve("new.txt"), "Updated duplicate content");
+
+            scanner.detectAndRecordDuplicates(dbManager);
+
+            assertEquals(4, dbManager.getFileCount(), "Removed entries should be pruned and new ones added");
+            List<FileDetails> files = dbManager.getFilesBySize(0);
+            assertTrue(files.stream().noneMatch(file -> file.getPath().endsWith("unique.txt")));
+            assertTrue(files.stream().anyMatch(file ->
+                    file.getPath().endsWith("file1.txt") && file.getSize() == "Updated duplicate content".length()));
+
+            List<List<FileDetails>> duplicateGroups = dbManager.getDuplicateGroups();
+            assertEquals(1, duplicateGroups.size());
+            assertEquals(2, duplicateGroups.get(0).size());
+            assertTrue(duplicateGroups.get(0).stream().anyMatch(file -> file.getPath().endsWith("file1.txt")));
+            assertTrue(duplicateGroups.get(0).stream().anyMatch(file -> file.getPath().endsWith("new.txt")));
+        } finally {
+            dbManager.close();
+        }
+    }
+
+    @Test
     void testGetFiles() throws IOException {
         scanner = new FileScanner(tempDir.toString());
         scanner.scan();
