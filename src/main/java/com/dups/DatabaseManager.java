@@ -2,16 +2,19 @@ package com.dups;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
  * Manages SQLite database operations for file tracking and duplicate detection.
  */
 public class DatabaseManager {
-    private static final String DB_NAME = "file_database.db";
+    static final String DB_NAME = "file_database.db";
     private static final String TABLE_FILES = "files";
     private static final String TABLE_DUPLICATES = "duplicates";
 
@@ -93,6 +96,77 @@ public class DatabaseManager {
             }
         }
         return -1;
+    }
+
+    /**
+     * Reconciles the database with a completed scan of a directory tree.
+     */
+    public void synchronizeFiles(List<FileDetails> scannedFiles, Path rootDirectory) throws SQLException {
+        Path normalizedRoot = rootDirectory.toAbsolutePath().normalize();
+        Map<String, FileDetails> filesByPath = new HashMap<>();
+        for (FileDetails file : scannedFiles) {
+            filesByPath.put(Path.of(file.getPath()).toAbsolutePath().normalize().toString(), file);
+        }
+
+        boolean autoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
+        try {
+            List<String> stalePaths = new ArrayList<>();
+            String selectFiles = "SELECT path FROM " + TABLE_FILES;
+            try (Statement stmt = connection.createStatement();
+                 ResultSet rs = stmt.executeQuery(selectFiles)) {
+                while (rs.next()) {
+                    String path = rs.getString("path");
+                    if (Path.of(path).toAbsolutePath().normalize().startsWith(normalizedRoot)) {
+                        if (!filesByPath.containsKey(Path.of(path).toAbsolutePath().normalize().toString())) {
+                            stalePaths.add(path);
+                        }
+                    }
+                }
+            }
+
+            try (Statement stmt = connection.createStatement()) {
+                stmt.executeUpdate("DELETE FROM " + TABLE_DUPLICATES);
+            }
+
+            String deleteFile = "DELETE FROM " + TABLE_FILES + " WHERE path = ?";
+            try (PreparedStatement stmt = connection.prepareStatement(deleteFile)) {
+                for (String path : stalePaths) {
+                    stmt.setString(1, path);
+                    stmt.addBatch();
+                }
+                stmt.executeBatch();
+            }
+
+            for (FileDetails file : scannedFiles) {
+                saveFile(file);
+            }
+
+            Map<String, List<Integer>> idsByHash = new HashMap<>();
+            String selectHashes = "SELECT id, hash FROM " + TABLE_FILES + " WHERE hash IS NOT NULL";
+            try (Statement stmt = connection.createStatement();
+                 ResultSet rs = stmt.executeQuery(selectHashes)) {
+                while (rs.next()) {
+                    idsByHash.computeIfAbsent(rs.getString("hash"), hash -> new ArrayList<>())
+                            .add(rs.getInt("id"));
+                }
+            }
+
+            for (List<Integer> ids : idsByHash.values()) {
+                for (int i = 0; i < ids.size(); i++) {
+                    for (int j = i + 1; j < ids.size(); j++) {
+                        recordDuplicate(ids.get(i), ids.get(j));
+                    }
+                }
+            }
+
+            connection.commit();
+        } catch (SQLException | RuntimeException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(autoCommit);
+        }
     }
 
     /**
