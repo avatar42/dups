@@ -2,8 +2,6 @@ package com.dups;
 
 import java.io.File;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.Objects;
 
 /**

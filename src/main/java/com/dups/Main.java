@@ -12,12 +12,22 @@ import java.util.List;
  */
 public class Main {
     public static void main(String[] args) {
-        String directory = ".";
-        
-        if (args.length > 0) {
-            directory = args[0];
+        Options options;
+        try {
+            options = parseArguments(args);
+        } catch (IllegalArgumentException e) {
+            System.err.println("Error: " + e.getMessage());
+            printUsage();
+            System.exit(2);
+            return;
         }
 
+        if (options.help()) {
+            printUsage();
+            return;
+        }
+
+        String directory = options.directory();
         System.out.println("=== File Duplicate Detector ===");
         System.out.println("Scanning directory: " + directory);
         System.out.println();
@@ -60,6 +70,20 @@ public class Main {
                 System.out.println("Total duplicate groups: " + totalDuplicateGroups);
             }
 
+            if (options.sizeLimit() > 0) {
+                List<FileDetails> duplicatedFiles = dbManager.getDuplicatesSortedBySize();
+                int count = Math.min(options.sizeLimit(), duplicatedFiles.size());
+                System.out.println();
+                System.out.println("=== Top " + options.sizeLimit() + " Duplicated Files by Size ===");
+                if (count == 0) {
+                    System.out.println("No duplicate files found.");
+                } else {
+                    for (FileDetails file : duplicatedFiles.subList(0, count)) {
+                        System.out.println(formatSize(file.getSize()) + "  " + file.getPath());
+                    }
+                }
+            }
+
             dbManager.close();
             System.out.println("Done! Database saved to file_database.db");
 
@@ -71,6 +95,51 @@ public class Main {
             e.printStackTrace();
             System.exit(1);
         }
+    }
+
+    static Options parseArguments(String[] args) {
+        String directory = ".";
+        int sizeLimit = 0;
+        boolean directorySpecified = false;
+        boolean help = false;
+
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if ("-h".equals(arg) || "--help".equals(arg)) {
+                help = true;
+            } else if ("-s".equals(arg)) {
+                if (++i >= args.length) {
+                    throw new IllegalArgumentException("Option -s requires a positive number of files");
+                }
+                try {
+                    sizeLimit = Integer.parseInt(args[i]);
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Option -s requires a positive number of files");
+                }
+                if (sizeLimit <= 0) {
+                    throw new IllegalArgumentException("Option -s requires a positive number of files");
+                }
+            } else if (arg.startsWith("-")) {
+                throw new IllegalArgumentException("Unknown option: " + arg);
+            } else if (directorySpecified) {
+                throw new IllegalArgumentException("Only one directory may be specified");
+            } else {
+                directory = arg;
+                directorySpecified = true;
+            }
+        }
+
+        return new Options(directory, sizeLimit, help);
+    }
+
+    private static void printUsage() {
+        System.out.println("Usage: java -jar file-dup-detector.jar [-s N] [directory]");
+        System.out.println("  directory  Directory to scan (default: current directory)");
+        System.out.println("  -s N       Show the N largest files that have duplicates");
+        System.out.println("  -h, --help Show this help message");
+    }
+
+    record Options(String directory, int sizeLimit, boolean help) {
     }
 
     /**

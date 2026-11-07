@@ -10,6 +10,7 @@ A Java application that walks a folder tree, stores file details in a SQLite dat
 - Handles re-runs by updating existing file records
 - Stores duplicate relationships in a separate table
 - Displays duplicates sorted by size (largest first)
+- Optionally lists the largest duplicated files with `-s N`
 - Human-readable file size formatting
 
 ## Building
@@ -25,16 +26,18 @@ mvn clean package
 ### Command Line
 
 ```bash
-java -jar target/file-dup-detector-1.0-SNAPSHOT.jar [directory]
+java -jar target/file-dup-detector-1.0-SNAPSHOT.jar [-s N] [directory]
 ```
 
 ### Arguments
 
 - **directory** (optional) - The directory to scan for duplicate files. If not specified, the current directory is used.
+- **-s N** (optional) - Show the N largest files that have duplicates, ordered by size. N must be a positive integer. The option can appear before or after the directory.
 
 ### Options
 
 - **-h, --help** - Show help message and usage information
+- **-s N** - Show the N largest duplicated files
 
 ### Examples
 
@@ -42,8 +45,14 @@ java -jar target/file-dup-detector-1.0-SNAPSHOT.jar [directory]
 # Scan current directory
 java -jar target/file-dup-detector-1.0-SNAPSHOT.jar
 
+# Show the 10 largest files that have duplicates
+java -jar target/file-dup-detector-1.0-SNAPSHOT.jar -s 10
+
 # Scan specific directory
 java -jar target/file-dup-detector-1.0-SNAPSHOT.jar /path/to/directory
+
+# Show the 5 largest duplicated files in a specific directory
+java -jar target/file-dup-detector-1.0-SNAPSHOT.jar -s 5 /path/to/directory
 
 # Show help
 java -jar target/file-dup-detector-1.0-SNAPSHOT.jar --help

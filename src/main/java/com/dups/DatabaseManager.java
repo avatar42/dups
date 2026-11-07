@@ -2,13 +2,13 @@ package com.dups;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Manages SQLite database operations for file tracking and duplicate detection.
@@ -117,10 +117,11 @@ public class DatabaseManager {
                  ResultSet rs = stmt.executeQuery(selectFiles)) {
                 while (rs.next()) {
                     String path = rs.getString("path");
-                    if (Path.of(path).toAbsolutePath().normalize().startsWith(normalizedRoot)) {
-                        if (!filesByPath.containsKey(Path.of(path).toAbsolutePath().normalize().toString())) {
-                            stalePaths.add(path);
-                        }
+                    Path normalizedPath = Path.of(path).toAbsolutePath().normalize();
+                    boolean missing = !Files.exists(normalizedPath);
+                    boolean outsideScan = !normalizedPath.startsWith(normalizedRoot);
+                    if (missing || (!outsideScan && !filesByPath.containsKey(normalizedPath.toString()))) {
+                        stalePaths.add(path);
                     }
                 }
             }
@@ -383,9 +384,10 @@ public class DatabaseManager {
     private boolean confirmDelete(String path, boolean isDirectory) {
         System.out.println((isDirectory ? "Directory" : "File") + " to delete: " + path);
         System.out.print("Are you sure you want to delete this? (y/N): ");
-        java.util.Scanner scanner = new java.util.Scanner(System.in);
-        String response = scanner.nextLine().trim().toLowerCase();
-        return response.equals("y") || response.equals("yes");
+        try (java.util.Scanner scanner = new java.util.Scanner(System.in)) {
+            String response = scanner.nextLine().trim().toLowerCase();
+            return response.equals("y") || response.equals("yes");
+        }
     }
 
     /**

@@ -3,14 +3,11 @@ package com.dups;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for DatabaseManager class.
@@ -132,6 +129,27 @@ public class DatabaseManagerTest {
         List<List<FileDetails>> groups = dbManager.getDuplicateGroups();
         
         Assertions.assertFalse(groups.isEmpty());
+    }
+
+    @Test
+    void testGetDuplicatesSortedBySizeExcludesUniqueFiles() throws SQLException {
+        int smallId = dbManager.saveFile(
+                new FileDetails("/test/path/duplicate-small.txt", 100L, "duplicate-hash", 1L));
+        int largeId = dbManager.saveFile(
+                new FileDetails("/test/path/duplicate-large.txt", 1000L, "duplicate-hash", 2L));
+        int mediumId = dbManager.saveFile(
+                new FileDetails("/test/path/duplicate-medium.txt", 500L, "duplicate-hash", 3L));
+        dbManager.saveFile(new FileDetails("/test/path/largest-unique.txt", 2000L, "unique-hash", 4L));
+        dbManager.recordDuplicate(smallId, largeId);
+        dbManager.recordDuplicate(smallId, mediumId);
+        dbManager.recordDuplicate(largeId, mediumId);
+
+        List<FileDetails> duplicatedFiles = dbManager.getDuplicatesSortedBySize();
+
+        Assertions.assertEquals(3, duplicatedFiles.size());
+        Assertions.assertEquals("/test/path/duplicate-large.txt", duplicatedFiles.get(0).getPath());
+        Assertions.assertEquals("/test/path/duplicate-medium.txt", duplicatedFiles.get(1).getPath());
+        Assertions.assertEquals("/test/path/duplicate-small.txt", duplicatedFiles.get(2).getPath());
     }
 
     @Test

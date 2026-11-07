@@ -120,15 +120,23 @@ public class FileScannerTest {
             assertEquals(4, dbManager.getFileCount());
             assertEquals(1, dbManager.getDuplicateGroups().size());
 
+            Path legacyFile = Files.createTempFile(tempDirStatic, "removed-legacy-", ".txt");
+            dbManager.saveFile(new FileDetails(legacyFile.toString(), 10L, "legacy-hash", 1L));
+            Files.delete(legacyFile);
+
             Files.writeString(tempDir.resolve("file1.txt"), "Updated duplicate content");
             Files.delete(tempDir.resolve("unique.txt"));
+            Files.delete(tempDir.resolve("subdir/nested.txt"));
+            Files.delete(tempDir.resolve("subdir"));
             Files.writeString(tempDir.resolve("new.txt"), "Updated duplicate content");
 
             scanner.detectAndRecordDuplicates(dbManager);
 
-            assertEquals(4, dbManager.getFileCount(), "Removed entries should be pruned and new ones added");
+            assertEquals(3, dbManager.getFileCount(), "Removed entries should be pruned and new ones added");
             List<FileDetails> files = dbManager.getFilesBySize(0);
             assertTrue(files.stream().noneMatch(file -> file.getPath().endsWith("unique.txt")));
+            assertTrue(files.stream().noneMatch(file -> file.getPath().endsWith("nested.txt")));
+            assertTrue(files.stream().noneMatch(file -> file.getPath().equals(legacyFile.toString())));
             assertTrue(files.stream().anyMatch(file ->
                     file.getPath().endsWith("file1.txt") && file.getSize() == "Updated duplicate content".length()));
 
@@ -139,6 +147,15 @@ public class FileScannerTest {
             assertTrue(duplicateGroups.get(0).stream().anyMatch(file -> file.getPath().endsWith("new.txt")));
         } finally {
             dbManager.close();
+        }
+
+        DatabaseManager reopenedDb = new DatabaseManager(tempDir.toString());
+        try {
+            assertEquals(3, reopenedDb.getFileCount(), "Removed entries should stay removed after reopening");
+            assertTrue(reopenedDb.getFilesBySize(0).stream()
+                    .noneMatch(file -> file.getPath().endsWith("nested.txt")));
+        } finally {
+            reopenedDb.close();
         }
     }
 

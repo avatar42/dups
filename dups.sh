@@ -1,0 +1,1 @@
+java -jar target/file-dup-detector-1.0-SNAPSHOT.jar $*
